@@ -93,6 +93,52 @@ var migrations = []string{
 	`CREATE INDEX IF NOT EXISTS idx_sessions_updated ON sessions(updated_at DESC)`,
 	`CREATE INDEX IF NOT EXISTS idx_events_session ON session_events(session_id, sequence)`,
 	`CREATE INDEX IF NOT EXISTS idx_ingestion_agent ON ingestion_state(agent_id)`,
+
+	`CREATE TABLE IF NOT EXISTS memory_docs (
+		id TEXT PRIMARY KEY,
+		agent_id TEXT NOT NULL REFERENCES agents(id),
+		source_path TEXT NOT NULL,
+		project_path TEXT,
+		title TEXT,
+		content TEXT,
+		size_bytes INTEGER NOT NULL DEFAULT 0,
+		mtime TEXT NOT NULL,
+		checksum TEXT NOT NULL,
+		metadata_json TEXT NOT NULL DEFAULT '{}',
+		UNIQUE(agent_id, source_path)
+	)`,
+
+	`CREATE TABLE IF NOT EXISTS timeline_items (
+		id TEXT PRIMARY KEY,
+		timestamp TEXT NOT NULL,
+		agent_id TEXT NOT NULL,
+		session_id TEXT,
+		memory_doc_id TEXT,
+		kind TEXT NOT NULL,
+		title TEXT NOT NULL,
+		body TEXT,
+		metadata_json TEXT NOT NULL DEFAULT '{}'
+	)`,
+
+	`CREATE VIRTUAL TABLE IF NOT EXISTS memory_fts USING fts5(
+		title, content, source_path,
+		content='memory_docs',
+		content_rowid='rowid'
+	)`,
+
+	`CREATE TRIGGER IF NOT EXISTS memory_ai AFTER INSERT ON memory_docs BEGIN
+		INSERT INTO memory_fts(rowid, title, content, source_path) VALUES (new.rowid, new.title, new.content, new.source_path);
+	END`,
+
+	`CREATE TRIGGER IF NOT EXISTS memory_au AFTER UPDATE ON memory_docs BEGIN
+		INSERT INTO memory_fts(memory_fts, rowid, title, content, source_path) VALUES('delete', old.rowid, old.title, old.content, old.source_path);
+		INSERT INTO memory_fts(rowid, title, content, source_path) VALUES (new.rowid, new.title, new.content, new.source_path);
+	END`,
+
+	`CREATE INDEX IF NOT EXISTS idx_memory_agent ON memory_docs(agent_id)`,
+	`CREATE INDEX IF NOT EXISTS idx_timeline_ts ON timeline_items(timestamp DESC)`,
+	`CREATE INDEX IF NOT EXISTS idx_timeline_agent ON timeline_items(agent_id)`,
+	`CREATE INDEX IF NOT EXISTS idx_timeline_kind ON timeline_items(kind)`,
 }
 
 func RunMigrations(ctx context.Context, db *sql.DB) error {

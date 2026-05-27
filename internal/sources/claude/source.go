@@ -25,12 +25,13 @@ func (s *Source) AgentInfo() models.Agent {
 	}
 }
 
-func (s *Source) ParserVersion() string            { return ParserVersion }
-func (s *Source) DiscoverRoots() ([]string, error)  { return DiscoverRoots("") }
-func (s *Source) DiscoverSessions() ([]string, error) { return DiscoverSessions("") }
+func (s *Source) ParserVersion() string                { return ParserVersion }
+func (s *Source) DiscoverRoots() ([]string, error)     { return DiscoverRoots("") }
+func (s *Source) DiscoverSessions() ([]string, error)  { return DiscoverSessions("") }
+func (s *Source) DiscoverMemoryFiles() ([]string, error) { return DiscoverMemoryFiles("") }
 func (s *Source) ProjectPathFromSource(p string) string { return ProjectPathFromSource(p) }
-func (s *Source) SupportsIncremental() bool         { return true }
-func (s *Source) WatchExtensions() []string         { return []string{".jsonl"} }
+func (s *Source) SupportsIncremental() bool            { return true }
+func (s *Source) WatchExtensions() []string            { return []string{".jsonl"} }
 
 func (s *Source) ParseFile(r io.Reader, agentID string, sourcePath string, startOffset int64) (*sources.ParseResult, error) {
 	return ParseSession(r, agentID, sourcePath, startOffset)

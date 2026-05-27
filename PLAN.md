@@ -2,7 +2,7 @@
 
 ## Current Phase
 
-**Phase 3: Multi-Agent Adapters** — Codex, Augment, Cursor
+**Phase 4: Product UI** — multi-page routing, agent filter chips, memory browser, timeline, unified search
 
 ## Status: Built — ready to merge
 
@@ -26,43 +26,42 @@
 - [x] Recursive fsnotify file watcher
 - [x] Process monitor for running agent detection
 
-### Phase 3 Multi-Agent Adapters
+### Phase 3 Multi-Agent Adapters (merged)
 
-#### Source interface + refactored indexer
-- [x] Shared `sources.Source` interface with ParseResult, discovery, parsing, watch extensions
-- [x] Refactored indexer to iterate over `[]sources.Source` instead of hardcoded Claude
-- [x] Updated watcher to support multiple file extensions (.jsonl + .json)
-- [x] Each source registers its own agent, roots, parser version, file extensions
+- [x] Shared Source interface, refactored indexer
+- [x] Codex CLI, Augment/Auggie, and Cursor adapters
+- [x] All 4 agents indexed from real data (600 sessions, 52k events)
 
-#### Codex CLI adapter (`internal/sources/codex/`)
-- [x] Discover sessions under `~/.codex/sessions/YYYY/MM/DD/rollout-*.jsonl`
-- [x] JSONL parser: session_meta, event_msg (user_message, agent_message, task_started, task_complete), response_item (message, function_call, function_call_output, reasoning)
-- [x] Incremental parsing by byte offset
-- [x] Project path from session_meta.cwd
-- [x] Title from first user message (with XML tag stripping)
+### Phase 4 Product UI
 
-#### Augment/Auggie adapter (`internal/sources/augment/`)
-- [x] Discover sessions under `~/.augment/sessions/*.json`
-- [x] Monolithic JSON parser: chatHistory[].exchange (request_message + response_text)
-- [x] Full re-parse on change (no incremental — Augment rewrites entire file)
-- [x] Changed files tracked per exchange
-- [x] Title from customTitle or first non-system user message
+#### Backend
+- [x] `memory_docs` table with FTS5 search, triggers, indexes
+- [x] `timeline_items` table with indexes for timestamp, agent, kind
+- [x] Memory discovery: Claude (CLAUDE.md, settings, project memory), Codex (520 memory files from ~/.codex/memories/)
+- [x] Memory indexing with checksum-based change detection
+- [x] Timeline generation from session creation/updates and memory changes
+- [x] API endpoints: GET /memory, GET /memory/{id}, GET /timeline, GET /stats
+- [x] Enhanced unified search across sessions, events, AND memory docs
+- [x] Stats endpoint with per-agent session counts
 
-#### Cursor adapter (`internal/sources/cursor/`)
-- [x] Discover transcripts under `~/.cursor/projects/<encoded>/agent-transcripts/**/*.jsonl`
-- [x] JSONL parser: Claude-like format (role + message.content blocks)
-- [x] Tool use extraction (Shell, Glob, Grep, etc.)
-- [x] Incremental parsing by byte offset
-- [x] Project path decoder (greedy filesystem probing, like Claude)
-- [x] Title from first user message (with XML/plugin_info stripping, user_query unwrapping)
+#### Frontend
+- [x] @solidjs/router with 5 routes (/, /sessions/:id?, /timeline, /memory/:id?, /search)
+- [x] App shell with top nav bar, agent filter chips, connection status, reindex button
+- [x] Agent filter chips (toggle per agent, filters all pages)
+- [x] OverviewPage: stat cards, running processes, recent sessions, timeline preview
+- [x] SessionsPage: sidebar session list with search + detail pane, agent dots per session
+- [x] TimelinePage: chronological feed grouped by date, linked to sessions/memory
+- [x] MemoryPage: sidebar file list with search + content viewer
+- [x] SearchPage: unified search across sessions, events, memory with type grouping
+- [x] WebSocket subscriptions for memory + timeline topics
+- [x] Full dark theme CSS for all new pages and components
 
 #### Validated against real data
-- Claude Code: 410 sessions, 32k+ events
-- Codex CLI: 75 sessions, 16k events
-- Augment (Auggie): 76 sessions, 583 events
-- Cursor: 12 sessions, 755 events
-- All four agents visible in API `/api/v1/agents`
-- FTS search works across all agents
+- 600 sessions across 4 agents (claude 433, codex 79, auggie 76, cursor 12)
+- 52k+ events indexed
+- 523 memory files indexed (Claude + Codex)
+- All API endpoints returning correct data
+- Frontend builds clean (TypeScript + Vite)
 
 ### Testing (deferred)
 - [ ] Redacted fixture files per agent
@@ -71,7 +70,7 @@
 
 ## What's Next
 
-Phase 4: product UI — sessions page with agent filter, memory browser, unified search, timeline.
+Phase 5: hardening — benchmarks, Playwright smoke tests, packaging, config file support, launch instructions.
 
 ## Blockers
 
@@ -84,4 +83,5 @@ None.
 | 2026-05-27 | main | handed-off | Spec written (Codex gpt-5.5 enhanced), skill installed, repo bootstrapped, 4-agent orchestrated plan review, spec corrections applied. Ready for Phase 1 build. |
 | 2026-05-27 | feature/phase-1-mvp | merged | Phase 1 MVP complete. Go backend parsing real Claude Code JSONL, SolidJS dashboard. |
 | 2026-05-27 | feature/phase-2-live | merged | Phase 2: WebSocket broker, file watcher, process monitor. |
-| 2026-05-27 | feature/phase-3-multi-agent | built | Phase 3: Source interface, Codex/Augment/Cursor adapters. All 4 agents indexed from real data. |
+| 2026-05-27 | feature/phase-3-multi-agent | merged | Phase 3: Source interface, Codex/Augment/Cursor adapters. All 4 agents indexed from real data. |
+| 2026-05-27 | feature/phase-4-product-ui | built | Phase 4: Multi-page routing, agent chips, memory browser (523 files), timeline, unified search, stats dashboard. |

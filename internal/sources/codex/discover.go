@@ -54,6 +54,31 @@ func DiscoverSessions(rootPath string) ([]string, error) {
 	return paths, nil
 }
 
+func DiscoverMemoryFiles() ([]string, error) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return nil, err
+	}
+
+	memDir := filepath.Join(home, ".codex", "memories")
+	if info, err := os.Stat(memDir); err != nil || !info.IsDir() {
+		return nil, nil
+	}
+
+	var paths []string
+	filepath.Walk(memDir, func(path string, info os.FileInfo, err error) error {
+		if err != nil || info.IsDir() {
+			return nil
+		}
+		ext := filepath.Ext(path)
+		if ext == ".md" || ext == ".txt" || ext == ".json" {
+			paths = append(paths, path)
+		}
+		return nil
+	})
+	return paths, nil
+}
+
 // ProjectPathFromSource extracts the cwd from the session_meta record.
 // Codex session paths encode date but not project: YYYY/MM/DD/rollout-*.jsonl.
 // The actual project path comes from parsing session_meta.payload.cwd.

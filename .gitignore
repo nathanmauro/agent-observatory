@@ -31,3 +31,5 @@ fixtures/real/
 
 # Build artifacts
 agent-observatory
+.playwright-mcp/
+.vite/

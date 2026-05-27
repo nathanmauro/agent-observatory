@@ -15,7 +15,11 @@ import (
 	"github.com/nathanmauro/agent-observatory/internal/events"
 	"github.com/nathanmauro/agent-observatory/internal/indexer"
 	"github.com/nathanmauro/agent-observatory/internal/processes"
+	"github.com/nathanmauro/agent-observatory/internal/sources"
+	"github.com/nathanmauro/agent-observatory/internal/sources/augment"
 	"github.com/nathanmauro/agent-observatory/internal/sources/claude"
+	"github.com/nathanmauro/agent-observatory/internal/sources/codex"
+	"github.com/nathanmauro/agent-observatory/internal/sources/cursor"
 	"github.com/nathanmauro/agent-observatory/internal/watch"
 	"github.com/nathanmauro/agent-observatory/internal/ws"
 )
@@ -33,7 +37,14 @@ func main() {
 
 	bus := events.NewBus()
 
-	ix := indexer.New(database, bus)
+	allSources := []sources.Source{
+		claude.NewSource(),
+		codex.NewSource(),
+		augment.NewSource(),
+		cursor.NewSource(),
+	}
+
+	ix := indexer.New(database, bus, allSources)
 
 	log.Println("running initial index…")
 	if err := ix.IndexAll(context.Background()); err != nil {
@@ -46,10 +57,23 @@ func main() {
 	mon := processes.NewMonitor(bus)
 	go mon.Run(context.Background())
 
-	roots, _ := claude.DiscoverRoots("")
-	watcher := watch.New(ix)
+	var allRoots []string
+	var allExts []string
+	extSet := make(map[string]bool)
+	for _, src := range allSources {
+		roots, _ := src.DiscoverRoots()
+		allRoots = append(allRoots, roots...)
+		for _, ext := range src.WatchExtensions() {
+			if !extSet[ext] {
+				extSet[ext] = true
+				allExts = append(allExts, ext)
+			}
+		}
+	}
+
+	watcher := watch.New(ix, allExts)
 	go func() {
-		if err := watcher.Start(context.Background(), roots); err != nil {
+		if err := watcher.Start(context.Background(), allRoots); err != nil {
 			log.Printf("watcher: %v", err)
 		}
 	}()

@@ -44,10 +44,24 @@ func (ix *Indexer) IndexAll(ctx context.Context) error {
 			continue
 		}
 
-		log.Printf("indexing %s: %d files", agent.Name, len(paths))
+		log.Printf("indexing %s: %d session files", agent.Name, len(paths))
 		for _, path := range paths {
 			if err := ix.indexFile(ctx, path, src); err != nil {
 				log.Printf("index %s [%s]: %v", path, agent.ID, err)
+			}
+		}
+
+		memPaths, err := src.DiscoverMemoryFiles()
+		if err != nil {
+			log.Printf("discover %s memory: %v", agent.ID, err)
+			continue
+		}
+		if len(memPaths) > 0 {
+			log.Printf("indexing %s: %d memory files", agent.Name, len(memPaths))
+			for _, path := range memPaths {
+				if err := ix.indexMemoryFile(ctx, path, src); err != nil {
+					log.Printf("index memory %s [%s]: %v", path, agent.ID, err)
+				}
 			}
 		}
 	}
@@ -161,9 +175,11 @@ func (ix *Indexer) indexFile(ctx context.Context, path string, src sources.Sourc
 		MessageCount: result.UserMsgCount,
 		MetadataJSON: "{}",
 	}
+	isNewSession := existing == nil || existing.ParserVersion != pv
 	if err := ix.db.UpsertSession(ctx, sess); err != nil {
 		return fmt.Errorf("upsert session: %w", err)
 	}
+	ix.emitTimelineForSession(ctx, sess, isNewSession)
 	if ix.bus != nil {
 		ix.bus.Publish(events.Event{
 			Type:  "session.updated",
@@ -207,6 +223,100 @@ func (ix *Indexer) indexFile(ctx context.Context, path string, src sources.Sourc
 	}
 
 	return nil
+}
+
+func (ix *Indexer) indexMemoryFile(ctx context.Context, path string, src sources.Source) error {
+	info, err := os.Stat(path)
+	if err != nil {
+		return fmt.Errorf("stat: %w", err)
+	}
+
+	agent := src.AgentInfo()
+	checksum := fmt.Sprintf("%d-%d", info.Size(), info.ModTime().UnixNano())
+
+	existing, err := ix.db.GetIngestion(ctx, "mem:"+path)
+	if err != nil {
+		return fmt.Errorf("get ingestion: %w", err)
+	}
+	if existing != nil && existing.Checksum == checksum {
+		return nil
+	}
+
+	content, err := os.ReadFile(path)
+	if err != nil {
+		return fmt.Errorf("read: %w", err)
+	}
+
+	title := filepath.Base(path)
+	projectPath := src.ProjectPathFromSource(path)
+
+	docID := deterministicID("mem:" + path)
+	doc := models.MemoryDoc{
+		ID:           docID,
+		AgentID:      agent.ID,
+		SourcePath:   path,
+		ProjectPath:  projectPath,
+		Title:        title,
+		Content:      string(content),
+		SizeBytes:    info.Size(),
+		Mtime:        info.ModTime(),
+		Checksum:     checksum,
+		MetadataJSON: "{}",
+	}
+	if err := ix.db.UpsertMemoryDoc(ctx, doc); err != nil {
+		return fmt.Errorf("upsert memory doc: %w", err)
+	}
+
+	isNew := existing == nil
+	tlKind := "memory.updated"
+	if isNew {
+		tlKind = "memory.created"
+	}
+	ix.db.InsertTimelineItem(ctx, models.TimelineItem{
+		ID:           deterministicID(fmt.Sprintf("tl:%s:%s", tlKind, path)),
+		Timestamp:    info.ModTime(),
+		AgentID:      agent.ID,
+		MemoryDocID:  docID,
+		Kind:         tlKind,
+		Title:        fmt.Sprintf("%s: %s", agent.Name, title),
+		MetadataJSON: "{}",
+	})
+
+	if ix.bus != nil {
+		ix.bus.Publish(events.Event{
+			Type:  "memory.updated",
+			Topic: "memory",
+			Data:  doc,
+		})
+	}
+
+	now := time.Now().UTC()
+	return ix.db.UpsertIngestion(ctx, models.IngestionState{
+		SourcePath:     "mem:" + path,
+		AgentID:        agent.ID,
+		ParserVersion:  "mem-v1",
+		SizeBytes:      info.Size(),
+		Mtime:          info.ModTime(),
+		Checksum:       checksum,
+		LastIngestedAt: now,
+	})
+}
+
+func (ix *Indexer) emitTimelineForSession(ctx context.Context, sess models.Session, isNew bool) {
+	kind := "session.updated"
+	if isNew {
+		kind = "session.created"
+	}
+	ix.db.InsertTimelineItem(ctx, models.TimelineItem{
+		ID:           deterministicID(fmt.Sprintf("tl:%s:%s", kind, sess.ID)),
+		Timestamp:    sess.UpdatedAt,
+		AgentID:      sess.AgentID,
+		SessionID:    sess.ID,
+		Kind:         kind,
+		Title:        sess.Title,
+		Body:         sess.Summary,
+		MetadataJSON: "{}",
+	})
 }
 
 func deterministicID(sourcePath string) string {

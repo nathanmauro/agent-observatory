@@ -257,6 +257,31 @@ func (d *DB) Search(ctx context.Context, query string, limit int) ([]models.Sear
 		return nil, err
 	}
 
+	memQ := `SELECT m.id, a.type, m.title, m.source_path, m.project_path, m.mtime, f.rank
+		FROM memory_fts f
+		JOIN memory_docs m ON f.rowid = m.rowid
+		LEFT JOIN agents a ON m.agent_id = a.id
+		WHERE memory_fts MATCH ?
+		ORDER BY f.rank
+		LIMIT ?`
+
+	mRows, err := d.sql.QueryContext(ctx, memQ, query, limit)
+	if err == nil {
+		defer mRows.Close()
+		for mRows.Next() {
+			var r models.SearchResult
+			var agentType, path, project, mtime sql.NullString
+			if err := mRows.Scan(&r.ID, &agentType, &r.Title, &path, &project, &mtime, &r.Rank); err == nil {
+				r.Type = "memory"
+				r.AgentType = agentType.String
+				r.Path = path.String
+				r.Project = project.String
+				r.Timestamp = mtime.String
+				results = append(results, r)
+			}
+		}
+	}
+
 	if len(results) > limit {
 		results = results[:limit]
 	}
@@ -314,6 +339,200 @@ func (d *DB) UpsertIngestion(ctx context.Context, s models.IngestionState) error
 		s.Checksum, s.OffsetBytes,
 		s.LastIngestedAt.Format(time.RFC3339), s.Error)
 	return err
+}
+
+func (d *DB) UpsertMemoryDoc(ctx context.Context, m models.MemoryDoc) error {
+	_, err := d.stmtUpsertMemory.ExecContext(ctx,
+		m.ID, m.AgentID, m.SourcePath, m.ProjectPath,
+		m.Title, m.Content, m.SizeBytes,
+		m.Mtime.Format(time.RFC3339), m.Checksum, m.MetadataJSON)
+	return err
+}
+
+func (d *DB) GetMemoryDoc(ctx context.Context, id string) (*models.MemoryDoc, error) {
+	var m models.MemoryDoc
+	var mtimeStr string
+	err := d.stmtGetMemory.QueryRowContext(ctx, id).Scan(
+		&m.ID, &m.AgentID, &m.SourcePath, &m.ProjectPath,
+		&m.Title, &m.Content, &m.SizeBytes, &mtimeStr,
+		&m.Checksum, &m.MetadataJSON,
+	)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	m.Mtime, _ = time.Parse(time.RFC3339, mtimeStr)
+	return &m, nil
+}
+
+func (d *DB) ListMemoryDocs(ctx context.Context, agentID, projectPath, query string, limit int, cursor string) (*models.PagedResponse[models.MemoryDoc], error) {
+	if limit <= 0 {
+		limit = 50
+	}
+
+	var rows *sql.Rows
+	var err error
+
+	if query != "" {
+		q := `SELECT m.id, m.agent_id, m.source_path, m.project_path, m.title,
+				m.content, m.size_bytes, m.mtime, m.checksum, m.metadata_json
+			FROM memory_docs m
+			JOIN memory_fts f ON f.rowid = m.rowid
+			WHERE memory_fts MATCH ?`
+		args := []any{query}
+		if agentID != "" {
+			q += " AND m.agent_id = ?"
+			args = append(args, agentID)
+		}
+		if projectPath != "" {
+			q += " AND m.project_path = ?"
+			args = append(args, projectPath)
+		}
+		if cursor != "" {
+			q += " AND m.mtime < ?"
+			args = append(args, cursor)
+		}
+		q += " ORDER BY m.mtime DESC LIMIT ?"
+		args = append(args, limit+1)
+		rows, err = d.sql.QueryContext(ctx, q, args...)
+	} else {
+		q := `SELECT id, agent_id, source_path, project_path, title,
+				content, size_bytes, mtime, checksum, metadata_json
+			FROM memory_docs WHERE 1=1`
+		args := []any{}
+		if agentID != "" {
+			q += " AND agent_id = ?"
+			args = append(args, agentID)
+		}
+		if projectPath != "" {
+			q += " AND project_path = ?"
+			args = append(args, projectPath)
+		}
+		if cursor != "" {
+			q += " AND mtime < ?"
+			args = append(args, cursor)
+		}
+		q += " ORDER BY mtime DESC LIMIT ?"
+		args = append(args, limit+1)
+		rows, err = d.sql.QueryContext(ctx, q, args...)
+	}
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var docs []models.MemoryDoc
+	for rows.Next() {
+		var m models.MemoryDoc
+		var mtimeStr string
+		if err := rows.Scan(
+			&m.ID, &m.AgentID, &m.SourcePath, &m.ProjectPath,
+			&m.Title, &m.Content, &m.SizeBytes, &mtimeStr,
+			&m.Checksum, &m.MetadataJSON,
+		); err != nil {
+			return nil, err
+		}
+		m.Mtime, _ = time.Parse(time.RFC3339, mtimeStr)
+		docs = append(docs, m)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	resp := &models.PagedResponse[models.MemoryDoc]{Data: docs}
+	if len(docs) > limit {
+		resp.Data = docs[:limit]
+		resp.NextCursor = docs[limit-1].Mtime.Format(time.RFC3339)
+	}
+	return resp, nil
+}
+
+func (d *DB) InsertTimelineItem(ctx context.Context, t models.TimelineItem) error {
+	_, err := d.stmtInsertTimeline.ExecContext(ctx,
+		t.ID, t.Timestamp.Format(time.RFC3339), t.AgentID,
+		t.SessionID, t.MemoryDocID, t.Kind, t.Title, t.Body, t.MetadataJSON)
+	return err
+}
+
+func (d *DB) ListTimelineItems(ctx context.Context, agentID, kind string, limit int, cursor string) (*models.PagedResponse[models.TimelineItem], error) {
+	if limit <= 0 {
+		limit = 50
+	}
+
+	q := `SELECT t.id, t.timestamp, t.agent_id, COALESCE(a.type, ''), t.session_id, t.memory_doc_id,
+			t.kind, t.title, t.body, t.metadata_json
+		FROM timeline_items t
+		LEFT JOIN agents a ON t.agent_id = a.id
+		WHERE 1=1`
+	args := []any{}
+	if agentID != "" {
+		q += " AND t.agent_id = ?"
+		args = append(args, agentID)
+	}
+	if kind != "" {
+		q += " AND t.kind = ?"
+		args = append(args, kind)
+	}
+	if cursor != "" {
+		q += " AND t.timestamp < ?"
+		args = append(args, cursor)
+	}
+	q += " ORDER BY t.timestamp DESC LIMIT ?"
+	args = append(args, limit+1)
+
+	rows, err := d.sql.QueryContext(ctx, q, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var items []models.TimelineItem
+	for rows.Next() {
+		var t models.TimelineItem
+		var tsStr string
+		if err := rows.Scan(
+			&t.ID, &tsStr, &t.AgentID, &t.AgentType, &t.SessionID, &t.MemoryDocID,
+			&t.Kind, &t.Title, &t.Body, &t.MetadataJSON,
+		); err != nil {
+			return nil, err
+		}
+		t.Timestamp, _ = time.Parse(time.RFC3339, tsStr)
+		items = append(items, t)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	resp := &models.PagedResponse[models.TimelineItem]{Data: items}
+	if len(items) > limit {
+		resp.Data = items[:limit]
+		resp.NextCursor = items[limit-1].Timestamp.Format(time.RFC3339)
+	}
+	return resp, nil
+}
+
+func (d *DB) GetStats(ctx context.Context) (*models.Stats, error) {
+	stats := &models.Stats{AgentCounts: make(map[string]int)}
+
+	d.sql.QueryRowContext(ctx, "SELECT COUNT(*) FROM sessions").Scan(&stats.TotalSessions)
+	d.sql.QueryRowContext(ctx, "SELECT COUNT(*) FROM session_events").Scan(&stats.TotalEvents)
+	d.sql.QueryRowContext(ctx, "SELECT COUNT(*) FROM memory_docs").Scan(&stats.TotalMemory)
+
+	rows, err := d.sql.QueryContext(ctx, `SELECT a.type, COUNT(s.id) FROM sessions s JOIN agents a ON s.agent_id = a.id GROUP BY a.type`)
+	if err != nil {
+		return stats, nil
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var agentType string
+		var count int
+		if err := rows.Scan(&agentType, &count); err == nil {
+			stats.AgentCounts[agentType] = count
+		}
+	}
+	return stats, nil
 }
 
 func (d *DB) GetIngestion(ctx context.Context, sourcePath string) (*models.IngestionState, error) {

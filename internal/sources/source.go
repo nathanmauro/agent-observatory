@@ -23,6 +23,7 @@ type Source interface {
 	ParserVersion() string
 	DiscoverRoots() ([]string, error)
 	DiscoverSessions() ([]string, error)
+	DiscoverMemoryFiles() ([]string, error)
 	ProjectPathFromSource(sourcePath string) string
 	ParseFile(r io.Reader, agentID string, sourcePath string, startOffset int64) (*ParseResult, error)
 	SupportsIncremental() bool

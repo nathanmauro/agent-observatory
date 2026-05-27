@@ -116,6 +116,39 @@ type WSClientMessage struct {
 	Topics  []string `json:"topics,omitempty"`
 }
 
+type MemoryDoc struct {
+	ID           string    `json:"id"`
+	AgentID      string    `json:"agent_id"`
+	SourcePath   string    `json:"source_path"`
+	ProjectPath  string    `json:"project_path,omitempty"`
+	Title        string    `json:"title"`
+	Content      string    `json:"content,omitempty"`
+	SizeBytes    int64     `json:"size_bytes"`
+	Mtime        time.Time `json:"mtime"`
+	Checksum     string    `json:"-"`
+	MetadataJSON string    `json:"-"`
+}
+
+type TimelineItem struct {
+	ID           string    `json:"id"`
+	Timestamp    time.Time `json:"timestamp"`
+	AgentID      string    `json:"agent_id"`
+	AgentType    string    `json:"agent_type,omitempty"`
+	SessionID    string    `json:"session_id,omitempty"`
+	MemoryDocID  string    `json:"memory_doc_id,omitempty"`
+	Kind         string    `json:"kind"`
+	Title        string    `json:"title"`
+	Body         string    `json:"body,omitempty"`
+	MetadataJSON string    `json:"-"`
+}
+
+type Stats struct {
+	TotalSessions int            `json:"total_sessions"`
+	TotalEvents   int            `json:"total_events"`
+	TotalMemory   int            `json:"total_memory_docs"`
+	AgentCounts   map[string]int `json:"agent_counts"`
+}
+
 type Pagination struct {
 	Cursor string `json:"cursor,omitempty"`
 	Limit  int    `json:"limit"`

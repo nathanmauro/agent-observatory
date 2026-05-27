@@ -35,6 +35,10 @@ func NewRouter(database *db.DB, ix *indexer.Indexer, broker *ws.Broker, mon *pro
 		r.Get("/sessions", handleListSessions(database))
 		r.Get("/sessions/{id}", handleGetSession(database))
 		r.Get("/search", handleSearch(database))
+		r.Get("/memory", handleListMemory(database))
+		r.Get("/memory/{id}", handleGetMemory(database))
+		r.Get("/timeline", handleListTimeline(database))
+		r.Get("/stats", handleGetStats(database))
 		r.Get("/processes", handleListProcesses(mon))
 		r.Post("/reindex", handleReindex(ix))
 		r.Get("/ws", broker.HandleWS)
@@ -138,6 +142,80 @@ func handleSearch(database *db.DB) http.HandlerFunc {
 			results = []models.SearchResult{}
 		}
 		writeJSON(w, http.StatusOK, results)
+	}
+}
+
+func handleListMemory(database *db.DB) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		limit := queryInt(r, "limit", 50)
+		if limit > 200 {
+			limit = 200
+		}
+		resp, err := database.ListMemoryDocs(r.Context(),
+			r.URL.Query().Get("agent"),
+			r.URL.Query().Get("project"),
+			r.URL.Query().Get("q"),
+			limit,
+			r.URL.Query().Get("cursor"),
+		)
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		if resp.Data == nil {
+			resp.Data = []models.MemoryDoc{}
+		}
+		writeJSON(w, http.StatusOK, resp)
+	}
+}
+
+func handleGetMemory(database *db.DB) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		id := chi.URLParam(r, "id")
+		doc, err := database.GetMemoryDoc(r.Context(), id)
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		if doc == nil {
+			writeError(w, http.StatusNotFound, "memory doc not found")
+			return
+		}
+		writeJSON(w, http.StatusOK, doc)
+	}
+}
+
+func handleListTimeline(database *db.DB) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		limit := queryInt(r, "limit", 50)
+		if limit > 200 {
+			limit = 200
+		}
+		resp, err := database.ListTimelineItems(r.Context(),
+			r.URL.Query().Get("agent"),
+			r.URL.Query().Get("kind"),
+			limit,
+			r.URL.Query().Get("cursor"),
+		)
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		if resp.Data == nil {
+			resp.Data = []models.TimelineItem{}
+		}
+		writeJSON(w, http.StatusOK, resp)
+	}
+}
+
+func handleGetStats(database *db.DB) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		stats, err := database.GetStats(r.Context())
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		writeJSON(w, http.StatusOK, stats)
 	}
 }
 

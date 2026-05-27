@@ -54,6 +54,54 @@ func DiscoverSessions(rootPath string) ([]string, error) {
 	return paths, nil
 }
 
+func DiscoverMemoryFiles(rootPath string) ([]string, error) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return nil, err
+	}
+
+	var paths []string
+
+	claudeRoot := filepath.Join(home, ".claude")
+	candidates := []string{
+		filepath.Join(claudeRoot, "CLAUDE.md"),
+		filepath.Join(claudeRoot, "settings.json"),
+		filepath.Join(claudeRoot, "settings.local.json"),
+	}
+	for _, c := range candidates {
+		if info, err := os.Stat(c); err == nil && !info.IsDir() {
+			paths = append(paths, c)
+		}
+	}
+
+	if rootPath == "" {
+		rootPath = filepath.Join(home, defaultRoot)
+	}
+	filepath.Walk(rootPath, func(path string, info os.FileInfo, err error) error {
+		if err != nil || info.IsDir() {
+			return nil
+		}
+		name := filepath.Base(path)
+		if name == "CLAUDE.md" || name == "settings.json" || name == "settings.local.json" {
+			paths = append(paths, path)
+		}
+		return nil
+	})
+
+	memoryDir := filepath.Join(claudeRoot, "memory")
+	filepath.Walk(memoryDir, func(path string, info os.FileInfo, err error) error {
+		if err != nil || info.IsDir() {
+			return nil
+		}
+		if filepath.Ext(path) == ".md" {
+			paths = append(paths, path)
+		}
+		return nil
+	})
+
+	return paths, nil
+}
+
 // ProjectPathFromSource extracts the original filesystem path from the JSONL
 // file's parent directory name. Claude Code encodes project paths by replacing
 // each "/" with "-" in the absolute path, so "-Users-nathan-Developer-proj-name"

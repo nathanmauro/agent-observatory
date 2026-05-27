@@ -30,7 +30,7 @@ export function createWebSocket() {
       setStatus("connected");
       reconnectDelay = 1000;
       ws!.send(JSON.stringify({ type: "hello", last_seq: lastSeq }));
-      ws!.send(JSON.stringify({ type: "subscribe", topics: ["sessions", "processes"] }));
+      ws!.send(JSON.stringify({ type: "subscribe", topics: ["sessions", "processes", "memory", "timeline"] }));
     };
 
     ws.onmessage = (ev) => {

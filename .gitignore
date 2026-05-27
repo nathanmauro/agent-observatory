@@ -1,0 +1,33 @@
+# Go
+bin/
+*.test
+vendor/
+
+# Frontend (SolidJS / Vite)
+web/node_modules/
+web/dist/
+*.log
+
+# SQLite
+*.db
+*.db-wal
+*.db-shm
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# macOS
+.DS_Store
+
+# Editor
+.vscode/
+.idea/
+*.swp
+
+# Test fixtures with real data
+fixtures/real/
+
+# Build artifacts
+agent-observatory

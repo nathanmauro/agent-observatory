@@ -1,6 +1,7 @@
-import { createResource, For, Show, Switch, Match } from "solid-js";
+import { createResource, createEffect, For, Show, Switch, Match } from "solid-js";
 import { api, type SessionEvent } from "../lib/api";
 import { timeAgo, shortPath, truncate } from "../lib/format";
+import { createSessionEvents } from "../lib/stores";
 
 interface Props {
   sessionId: string;
@@ -8,6 +9,12 @@ interface Props {
 
 export default function SessionDetail(props: Props) {
   const [data] = createResource(() => props.sessionId, (id) => api.session(id));
+  const { events, setEvents } = createSessionEvents(() => props.sessionId);
+
+  createEffect(() => {
+    const d = data();
+    if (d?.events) setEvents(d.events);
+  });
 
   return (
     <div class="session-detail">
@@ -25,7 +32,7 @@ export default function SessionDetail(props: Props) {
                 </div>
               </div>
               <div class="event-list">
-                <For each={data()?.events ?? []}>
+                <For each={events()}>
                   {(event: SessionEvent) => <EventRow event={event} />}
                 </For>
                 <Show when={data()?.next_cursor}>

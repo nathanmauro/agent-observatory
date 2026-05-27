@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/nathanmauro/agent-observatory/internal/db"
+	"github.com/nathanmauro/agent-observatory/internal/events"
 	"github.com/nathanmauro/agent-observatory/internal/models"
 	"github.com/nathanmauro/agent-observatory/internal/sources/claude"
 )
@@ -19,11 +20,12 @@ const (
 )
 
 type Indexer struct {
-	db *db.DB
+	db  *db.DB
+	bus *events.Bus
 }
 
-func New(database *db.DB) *Indexer {
-	return &Indexer{db: database}
+func New(database *db.DB, bus *events.Bus) *Indexer {
+	return &Indexer{db: database, bus: bus}
 }
 
 func (ix *Indexer) IndexAll(ctx context.Context) error {
@@ -56,6 +58,10 @@ func (ix *Indexer) ensureAgent(ctx context.Context) error {
 		CreatedAt:    now,
 		UpdatedAt:    now,
 	})
+}
+
+func (ix *Indexer) IndexFile(ctx context.Context, path string) error {
+	return ix.indexFile(ctx, path)
 }
 
 func (ix *Indexer) indexFile(ctx context.Context, path string) error {
@@ -113,7 +119,7 @@ func (ix *Indexer) indexFile(ctx context.Context, path string) error {
 		result.Events[i].SessionID = sessionID
 	}
 
-	if err := ix.db.UpsertSession(ctx, models.Session{
+	sess := models.Session{
 		ID:           sessionID,
 		AgentID:      agentID,
 		ExternalID:   result.SessionID,
@@ -125,8 +131,16 @@ func (ix *Indexer) indexFile(ctx context.Context, path string) error {
 		UpdatedAt:    result.UpdatedAt,
 		MessageCount: result.UserMsgCount,
 		MetadataJSON: "{}",
-	}); err != nil {
+	}
+	if err := ix.db.UpsertSession(ctx, sess); err != nil {
 		return fmt.Errorf("upsert session: %w", err)
+	}
+	if ix.bus != nil {
+		ix.bus.Publish(events.Event{
+			Type:  "session.updated",
+			Topic: "sessions",
+			Data:  sess,
+		})
 	}
 
 	const batchSize = 500
@@ -138,6 +152,16 @@ func (ix *Indexer) indexFile(ctx context.Context, path string) error {
 		if err := ix.db.InsertEvents(ctx, result.Events[i:end]); err != nil {
 			return fmt.Errorf("insert events batch at %d: %w", i, err)
 		}
+	}
+	if ix.bus != nil && len(result.Events) > 0 {
+		ix.bus.Publish(events.Event{
+			Type:  "event.appended",
+			Topic: "sessions",
+			Data: map[string]any{
+				"session_id":  sessionID,
+				"event_count": len(result.Events),
+			},
+		})
 	}
 
 	now := time.Now().UTC()

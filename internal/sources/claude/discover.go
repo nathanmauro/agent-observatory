@@ -8,6 +8,20 @@ import (
 
 const defaultRoot = ".claude/projects"
 
+func DiscoverRoots(rootPath string) ([]string, error) {
+	if rootPath == "" {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return nil, err
+		}
+		rootPath = filepath.Join(home, defaultRoot)
+	}
+	if info, err := os.Stat(rootPath); err != nil || !info.IsDir() {
+		return nil, nil
+	}
+	return []string{rootPath}, nil
+}
+
 func DiscoverSessions(rootPath string) ([]string, error) {
 	if rootPath == "" {
 		home, err := os.UserHomeDir()

@@ -30,6 +30,6 @@ web/dist/
 fixtures/real/
 
 # Build artifacts
-agent-observatory
+/agent-observatory
 .playwright-mcp/
 .vite/

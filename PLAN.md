@@ -4,7 +4,7 @@
 
 **Phase 1: MVP** (Claude-only, REST-only)
 
-## Status: Not Started
+## Status: Ready to Build
 
 ## What's Done
 
@@ -46,4 +46,4 @@ None.
 
 | Date | Branch | Status | Summary |
 |------|--------|--------|---------|
-| 2026-05-27 | main | handed-off | Spec, skill, repo bootstrap, 4-agent plan review, spec corrections |
+| 2026-05-27 | main | handed-off | Spec written (Codex gpt-5.5 enhanced), skill installed, repo bootstrapped, 4-agent orchestrated plan review, spec corrections applied. Ready for Phase 1 build. |

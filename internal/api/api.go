@@ -14,11 +14,13 @@ import (
 	"github.com/nathanmauro/agent-observatory/internal/db"
 	"github.com/nathanmauro/agent-observatory/internal/indexer"
 	"github.com/nathanmauro/agent-observatory/internal/models"
+	"github.com/nathanmauro/agent-observatory/internal/processes"
+	"github.com/nathanmauro/agent-observatory/internal/ws"
 )
 
 const version = "0.1.0"
 
-func NewRouter(database *db.DB, ix *indexer.Indexer) chi.Router {
+func NewRouter(database *db.DB, ix *indexer.Indexer, broker *ws.Broker, mon *processes.Monitor) chi.Router {
 	r := chi.NewRouter()
 	r.Use(corsMiddleware)
 	r.Use(requestLogger)
@@ -33,7 +35,9 @@ func NewRouter(database *db.DB, ix *indexer.Indexer) chi.Router {
 		r.Get("/sessions", handleListSessions(database))
 		r.Get("/sessions/{id}", handleGetSession(database))
 		r.Get("/search", handleSearch(database))
+		r.Get("/processes", handleListProcesses(mon))
 		r.Post("/reindex", handleReindex(ix))
+		r.Get("/ws", broker.HandleWS)
 	})
 
 	r.Handle("/*", staticHandler())
@@ -134,6 +138,16 @@ func handleSearch(database *db.DB) http.HandlerFunc {
 			results = []models.SearchResult{}
 		}
 		writeJSON(w, http.StatusOK, results)
+	}
+}
+
+func handleListProcesses(mon *processes.Monitor) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		procs := mon.Snapshot()
+		if procs == nil {
+			procs = []models.Process{}
+		}
+		writeJSON(w, http.StatusOK, procs)
 	}
 }
 

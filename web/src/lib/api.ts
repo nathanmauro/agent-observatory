@@ -83,5 +83,6 @@ export const api = {
   },
   session: (id: string) => fetchJSON<SessionDetail>(`/api/v1/sessions/${id}`),
   search: (q: string, limit = 50) => fetchJSON<SearchResult[]>(`/api/v1/search?q=${encodeURIComponent(q)}&limit=${limit}`),
+  processes: () => fetchJSON<any[]>("/api/v1/processes"),
   reindex: () => fetch(`${BASE}/api/v1/reindex`, { method: "POST" }).then(r => r.json()),
 };

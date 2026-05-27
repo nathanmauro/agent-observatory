@@ -89,6 +89,33 @@ type SearchResult struct {
 	Timestamp string `json:"timestamp,omitempty"`
 }
 
+type Process struct {
+	PID        int       `json:"pid"`
+	PPID       int       `json:"ppid"`
+	Name       string    `json:"name"`
+	AgentType  AgentType `json:"agent_type"`
+	Command    string    `json:"command"`
+	CPUPercent float64   `json:"cpu_percent"`
+	RSSBytes   int64     `json:"rss_bytes"`
+	StartTime  time.Time `json:"start_time,omitempty"`
+	Status     string    `json:"status"`
+}
+
+type WSMessage struct {
+	Seq           uint64 `json:"seq"`
+	SchemaVersion int    `json:"schema_version"`
+	Type          string `json:"type"`
+	Topic         string `json:"topic"`
+	SentAt        string `json:"sent_at"`
+	Data          any    `json:"data"`
+}
+
+type WSClientMessage struct {
+	Type    string   `json:"type"`
+	LastSeq uint64   `json:"last_seq,omitempty"`
+	Topics  []string `json:"topics,omitempty"`
+}
+
 type Pagination struct {
 	Cursor string `json:"cursor,omitempty"`
 	Limit  int    `json:"limit"`

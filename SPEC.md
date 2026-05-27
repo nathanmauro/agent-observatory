@@ -68,7 +68,7 @@ internal/ws/
 web/
 ```
 
-Define a source adapter interface:
+Define source adapter interfaces:
 
 ```go
 type Source interface {
@@ -77,6 +77,14 @@ type Source interface {
     Scan(ctx context.Context, root Root, sink Sink) error
     WatchPaths(root Root) ([]string, error)
     ParseChanged(ctx context.Context, path string, sink Sink) error
+}
+
+// DatabaseSource extends Source for agents that store data in SQLite
+// (Codex logs_2.sqlite, Cursor ai-code-tracking.db).
+type DatabaseSource interface {
+    Source
+    ScanDatabase(ctx context.Context, root Root, sink Sink) error
+    ParseDatabaseChanges(ctx context.Context, root Root, since time.Time, sink Sink) error
 }
 ```
 
@@ -189,22 +197,29 @@ Claude Code:
 - Index `CLAUDE.md`, project memory files, commands, settings, and relevant markdown knowledge files.
 
 Codex CLI:
-- Discover JSONL sessions, SQLite logs, config, and memory folders under `~/.codex/`.
-- Parse SQLite with schema probing, not hardcoded assumptions only.
-- Index git-versioned memory files under `~/.codex/memories/`.
-- Preserve rollout/session IDs where present.
-- Treat database rows and JSONL rows as possible duplicate sources; deduplicate by content hash plus timestamp plus source path.
+- Discover JSONL sessions and SQLite databases under `~/.codex/`.
+- JSONL sessions (`sessions/YYYY/MM/DD/rollout-*.jsonl`) contain full conversation turns with record types: `session_meta`, `event_msg`, `response_item`. These include git state (`commit_hash`, `branch`, `repository_url`) and full `base_instructions`.
+- SQLite `logs_2.sqlite` (279 MB) contains raw log events (errors, debug info), NOT session transcripts. These are different data streams — do not treat as duplicates.
+- `codex-session-search.sqlite3` (218 MB) is Codex's own FTS index — read-only reference, do not rebuild.
+- Index git-versioned memory files under `~/.codex/memories/` (MEMORY.md, raw_memories.md, rollout_summaries/, extensions/chronicle/). Memory dir has its own `.git` history.
+- Also parse `session_index.jsonl` and `history.jsonl` for session summaries and search text.
+- Implement `DatabaseSource` interface for `logs_2.sqlite` — probe schema first (`logs` table: id, ts, ts_nanos, level, target, feedback_log_body, process_uuid, estimated_bytes).
 
 Augment/Auggie:
-- Parse `~/.augment/sessions/*.json` style session files and checkpoint files.
-- Extract messages, sub-agent metadata, tool activity, project paths, credit fields when present, and checkpoints as timeline events.
-- Expect single JSON files, not JSONL.
+- Parse `~/.augment/sessions/*.json` — each file is a single monolithic JSON object (NOT JSONL, NOT checkpoint files).
+- Top-level fields: `sessionId`, `created`, `modified`, `chatHistory` (array), `agentState`, `rootTaskUuid`, `subAgentCreditsUsed`, `subAgentCostUsd`.
+- Messages are nested inside `chatHistory[].exchange` — requires deep traversal to extract user/assistant content.
+- `agentState` contains persisted context: `userGuidelines`, `workspaceGuidelines`, `modelId`.
+- Track `changedFiles` and `changedFilesSkipped` per exchange for file-delta timeline.
+- `isHistorySummary` flag indicates condensed history segments (schema versioned via `historySummaryVersion`).
+- CANNOT use byte-offset incremental parsing — Augment rewrites the entire JSON file on every change. Use mtime + checksum for change detection, full re-parse on change.
 - Handle schema drift by keeping unknown fields in `metadata_json`.
 
 Cursor:
-- Discover project-based data under `.cursor` and Cursor application support storage.
-- Probe SQLite databases such as workspace state DBs before parsing.
-- Normalize chats, composer sessions, project roots, and editor agent metadata when present.
+- Transcripts are JSONL at `~/.cursor/projects/<project>/agent-transcripts/<uuid>/<uuid>.jsonl` — format is similar to Claude Code (`{"role":"user","message":{"content":[...]}}` per line).
+- SQLite at `~/.cursor/ai-tracking/ai-code-tracking.db` is for code attribution tracking, NOT session replay. Tables: `ai_code_hashes`, `scored_commits` (with `tabLinesAdded`, `composerLinesAdded`, `humanLinesAdded`), `conversation_summaries` (with `tldr`, `overview`, `summaryBullets`), `tracked_file_content`, `ai_deleted_files`.
+- Implement `DatabaseSource` for the tracking DB — useful for showing AI vs human edit attribution per project.
+- Also discover: `agent-tools/` (UUID-named .txt files), `mcps/` (MCP configs), `plans/`, `skills-cursor/`.
 - Cursor storage is the least stable source; build the adapter defensively and flag unsupported schemas in the UI.
 
 Processes:
@@ -385,7 +400,7 @@ Hard targets:
 Optimization requirements:
 
 - Stream parse large files.
-- Incrementally parse append-only JSONL by byte offset.
+- Incrementally parse append-only JSONL by byte offset (Claude Code, Codex, Cursor transcripts). Use mtime+checksum for Augment (full re-parse on change).
 - Batch SQLite writes.
 - Use FTS indexes and covering indexes.
 - Use virtualized frontend lists.
@@ -430,32 +445,34 @@ Acceptance criteria:
 
 Break the build into phases.
 
-Phase 0: discovery and fixtures
-- Inspect real local directories.
-- Document exact observed formats.
-- Create small redacted fixtures.
-- Write the source adapter contracts and parser expectations.
+Phase 0: discovery and fixtures — COMPLETE
+- Real local directories inspected and documented (see skill references/source-formats.md).
+- Remaining: create small redacted fixture files in `internal/fixtures/` for golden tests.
 
-Phase 1: skeleton
-- Create Go service, SQLite migrations, REST health route, static Solid build serving, and dev scripts.
-- Add a minimal Solid dashboard shell.
+Phase 1: MVP (merged skeleton + indexing) — Claude-only, REST-only
+- Create Go module, SQLite migrations (full schema from SQLite Model section), REST health route, static SolidJS embed, dev scripts.
+- Implement Claude Code JSONL parser end-to-end (line-by-line, byte-offset tracking, ingestion state).
+- FTS5 on sessions + session_events.
+- REST endpoints: /health, /api/v1/agents, /api/v1/sessions (with search), /api/v1/sessions/{id}, /api/v1/reindex.
+- SolidJS shell: SessionList, SessionDetail, SearchBar, basic styling.
+- No WebSocket yet — use manual reindex button or short poll interval.
+- No process monitoring yet.
+- Target: ~20 files, ~830 lines, running dashboard showing real Claude Code sessions.
 
-Phase 2: indexing foundation
-- Implement DB layer, source registry, ingestion state, FTS, and one parser end to end.
-- Start with Claude Code because it has known JSONL session structure.
+Phase 2: live runtime
+- Add process monitor, recursive fsnotify watcher, WebSocket broker, and frontend live stores.
+- Upgrade frontend from polling to WebSocket deltas.
 
-Phase 3: live runtime
-- Add process monitor, recursive watcher, WebSocket broker, and frontend live stores.
-
-Phase 4: multi-agent adapters
+Phase 3: multi-agent adapters
 - Add Codex, Augment/Auggie, and Cursor adapters.
 - Each adapter must ship with golden fixtures and parser tests.
+- Codex and Cursor adapters implement DatabaseSource interface.
 
-Phase 5: product UI
+Phase 4: product UI
 - Build sessions, memory browser, unified search, and timeline.
 - Add error surfaces and indexing progress.
 
-Phase 6: hardening
+Phase 5: hardening
 - Add benchmarks, Playwright smoke tests, packaging, config file support, and launch instructions.
 
 If using multiple agents, split by ownership:

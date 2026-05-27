@@ -2,7 +2,7 @@
 
 ## Current Phase
 
-**Phase 4: Product UI** — multi-page routing, agent filter chips, memory browser, timeline, unified search
+**Phase 5: Hardening** — tests, benchmarks, config file, README
 
 ## Status: Built — ready to merge
 
@@ -32,45 +32,36 @@
 - [x] Codex CLI, Augment/Auggie, and Cursor adapters
 - [x] All 4 agents indexed from real data (600 sessions, 52k events)
 
-### Phase 4 Product UI
+### Phase 4 Product UI (merged)
 
-#### Backend
-- [x] `memory_docs` table with FTS5 search, triggers, indexes
-- [x] `timeline_items` table with indexes for timestamp, agent, kind
-- [x] Memory discovery: Claude (CLAUDE.md, settings, project memory), Codex (520 memory files from ~/.codex/memories/)
-- [x] Memory indexing with checksum-based change detection
-- [x] Timeline generation from session creation/updates and memory changes
-- [x] API endpoints: GET /memory, GET /memory/{id}, GET /timeline, GET /stats
-- [x] Enhanced unified search across sessions, events, AND memory docs
-- [x] Stats endpoint with per-agent session counts
+- [x] Multi-page routing, agent filter chips, memory browser, timeline, unified search
+- [x] All 5 pages verified in headless browser with real data
 
-#### Frontend
-- [x] @solidjs/router with 5 routes (/, /sessions/:id?, /timeline, /memory/:id?, /search)
-- [x] App shell with top nav bar, agent filter chips, connection status, reindex button
-- [x] Agent filter chips (toggle per agent, filters all pages)
-- [x] OverviewPage: stat cards, running processes, recent sessions, timeline preview
-- [x] SessionsPage: sidebar session list with search + detail pane, agent dots per session
-- [x] TimelinePage: chronological feed grouped by date, linked to sessions/memory
-- [x] MemoryPage: sidebar file list with search + content viewer
-- [x] SearchPage: unified search across sessions, events, memory with type grouping
-- [x] WebSocket subscriptions for memory + timeline topics
-- [x] Full dark theme CSS for all new pages and components
+### Phase 5 Hardening
 
-#### Validated against real data
-- 600 sessions across 4 agents (claude 433, codex 79, auggie 76, cursor 12)
-- 52k+ events indexed
-- 523 memory files indexed (Claude + Codex)
-- All API endpoints returning correct data
-- Frontend builds clean (TypeScript + Vite)
+#### Tests
+- [x] Redacted fixture files per agent (Claude JSONL, Codex JSONL, Augment JSON, Cursor JSONL)
+- [x] Parser golden tests: Claude (3 tests), Codex (2), Augment (3), Cursor (4)
+- [x] DB tests: migrations, agent/session/event CRUD, pagination, FTS search, memory, timeline, ingestion state, stats (10 tests)
+- [x] API smoke tests: all endpoints including 404s, search validation, limit clamping (14 tests)
+- [x] 35 tests total, all passing
 
-### Testing (deferred)
-- [ ] Redacted fixture files per agent
-- [ ] Parser golden tests
-- [ ] API smoke tests
+#### Benchmarks
+- [x] Parser throughput: Claude 57 MB/s, Codex 62 MB/s, Augment 132 MB/s, Cursor 45 MB/s
+- [x] FTS search latency: 215μs/op (100 sessions)
+
+#### Config
+- [x] JSON config file support (~/.config/agent-observatory/config.json)
+- [x] Per-agent enable/disable, addr, db_path
+- [x] CLI flags override config file values
+
+#### Packaging
+- [x] Makefile targets: build, dev, test, bench, install, clean
+- [x] README with quickstart, commands, configuration, architecture, privacy
 
 ## What's Next
 
-Phase 5: hardening — benchmarks, Playwright smoke tests, packaging, config file support, launch instructions.
+Done for now. Future ideas: Playwright E2E tests, goreleaser, Homebrew tap.
 
 ## Blockers
 
@@ -84,4 +75,5 @@ None.
 | 2026-05-27 | feature/phase-1-mvp | merged | Phase 1 MVP complete. Go backend parsing real Claude Code JSONL, SolidJS dashboard. |
 | 2026-05-27 | feature/phase-2-live | merged | Phase 2: WebSocket broker, file watcher, process monitor. |
 | 2026-05-27 | feature/phase-3-multi-agent | merged | Phase 3: Source interface, Codex/Augment/Cursor adapters. All 4 agents indexed from real data. |
-| 2026-05-27 | feature/phase-4-product-ui | built | Phase 4: Multi-page routing, agent chips, memory browser (523 files), timeline, unified search, stats dashboard. |
+| 2026-05-27 | feature/phase-4-product-ui | merged | Phase 4: Multi-page routing, agent chips, memory browser (523 files), timeline, unified search, stats dashboard. |
+| 2026-05-27 | feature/phase-5-hardening | built | Phase 5: 35 tests + 5 benchmarks, config file, README, Makefile targets. All pages verified in headless browser. |

@@ -1,10 +1,9 @@
-.PHONY: build dev frontend backend clean
+.PHONY: build dev frontend backend test bench clean install
 
 build: frontend backend
 
 frontend:
 	cd web && npm install && npm run build
-	rm -rf internal/api/static/assets internal/api/static/index.html internal/api/static/favicon.svg
 	cp -r web/dist/* internal/api/static/
 
 backend:
@@ -12,6 +11,15 @@ backend:
 
 dev:
 	go run ./cmd/agent-observatory/
+
+test:
+	go test ./... -count=1
+
+bench:
+	go test ./internal/sources/... ./internal/db/ -bench=. -benchmem -count=1
+
+install: build
+	install -m 755 agent-observatory $(HOME)/.local/bin/agent-observatory
 
 clean:
 	rm -f agent-observatory

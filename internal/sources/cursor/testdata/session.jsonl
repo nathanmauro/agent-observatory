@@ -1,0 +1,5 @@
+{"role":"user","message":{"content":"<user_query>\nAdd unit tests for the parser\n</user_query>"}}
+{"role":"assistant","message":{"content":[{"type":"text","text":"I'll add unit tests for the parser module."},{"type":"tool_use","name":"write_file","input":{"path":"parser_test.go","content":"package parser"}}]}}
+{"role":"assistant","message":{"content":[{"type":"tool_result","text":"File written successfully"}]}}
+{"role":"user","message":{"content":"Looks good, now add edge case tests"}}
+{"role":"assistant","message":{"content":"I'll add tests for empty input, malformed data, and boundary conditions."}}

@@ -5,7 +5,6 @@ import (
 	"log"
 	"os"
 	"path/filepath"
-	"strings"
 	"sync"
 	"time"
 
@@ -17,13 +16,14 @@ type FileIndexer interface {
 }
 
 type Watcher struct {
-	indexer  FileIndexer
-	fw      *fsnotify.Watcher
-	mu      sync.Mutex
-	timers  map[string]*time.Timer
-	work    chan string
-	done    chan struct{}
-	stopped bool
+	indexer    FileIndexer
+	fw        *fsnotify.Watcher
+	mu        sync.Mutex
+	timers    map[string]*time.Timer
+	work      chan string
+	done      chan struct{}
+	stopped   bool
+	watchExts map[string]bool
 }
 
 const (
@@ -31,12 +31,20 @@ const (
 	workerCount   = 4
 )
 
-func New(indexer FileIndexer) *Watcher {
+func New(indexer FileIndexer, extensions []string) *Watcher {
+	exts := make(map[string]bool, len(extensions))
+	for _, ext := range extensions {
+		exts[ext] = true
+	}
+	if len(exts) == 0 {
+		exts[".jsonl"] = true
+	}
 	return &Watcher{
-		indexer: indexer,
-		timers:  make(map[string]*time.Timer),
-		work:    make(chan string, 64),
-		done:    make(chan struct{}),
+		indexer:    indexer,
+		timers:    make(map[string]*time.Timer),
+		work:      make(chan string, 64),
+		done:      make(chan struct{}),
+		watchExts: exts,
 	}
 }
 
@@ -107,7 +115,8 @@ func (w *Watcher) handleEvent(ev fsnotify.Event) {
 		return
 	}
 
-	if !strings.HasSuffix(ev.Name, ".jsonl") {
+	ext := filepath.Ext(ev.Name)
+	if !w.watchExts[ext] {
 		return
 	}
 

@@ -11,19 +11,10 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/nathanmauro/agent-observatory/internal/models"
+	"github.com/nathanmauro/agent-observatory/internal/sources"
 )
 
-const parserVersion = "claude-v1"
-
-type ParseResult struct {
-	SessionID    string
-	Title        string
-	Events       []models.SessionEvent
-	StartedAt    time.Time
-	UpdatedAt    time.Time
-	UserMsgCount int
-	OffsetBytes  int64
-}
+const ParserVersion = "claude-v1"
 
 type rawRecord struct {
 	Type      string          `json:"type"`
@@ -58,8 +49,8 @@ type contentBlock struct {
 	Content   json.RawMessage `json:"content"`
 }
 
-func ParseSession(r io.Reader, agentID string, sourcePath string, startOffset int64) (*ParseResult, error) {
-	result := &ParseResult{
+func ParseSession(r io.Reader, agentID string, sourcePath string, startOffset int64) (*sources.ParseResult, error) {
+	result := &sources.ParseResult{
 		OffsetBytes: startOffset,
 	}
 
